@@ -352,6 +352,7 @@ def vol_get_subvols_interval_indexes_mask(vol_shape, subvol_shape, stride_shape,
     
     if mask_is_cube:
         mask_shape, mask_offset = cube_mask_def
+        print(mask_shape)
         # Going to calculate subvols for the cube-shaped mask only
         zdim, ydim, xdim = mask_shape
         ztrans, ytrans, xtrans = mask_offset
@@ -377,25 +378,116 @@ def vol_get_subvols_interval_indexes_mask(vol_shape, subvol_shape, stride_shape,
     # A list of tuples containing interval indexes along each dimension
     interval_indexes_l = []
     
+    #
+    #interval_index_extra_t = ()
+    
     for vol_num_z in range(num_vols_z):
         for vol_num_y in range(num_vols_y):
             for vol_num_x in range(num_vols_x):
                 # -- Stride version --
-                # Most cases
-                # Check that volume is within the index dimensions
-                if vol_num_z*stride_z+vol_dim_z <= zdim \
+                """
+                # Edge cases
+                # If extra vol dims
+                # 1. z, <=y, <=x
+                if extra_vol_dim_z and vol_num_z == num_vols_z - 1 \
                 and vol_num_y*stride_y+vol_dim_y <= ydim \
                 and vol_num_x*stride_x+vol_dim_x <= xdim:
-                    # Create slice intervals, defining location of subvolume
-                    z_interval_t = (vol_num_z*stride_z, \
-                                    vol_num_z*stride_z+vol_dim_z)
+                    #print("her!")
+                    #sys.exit()
+                    z_interval_t = (vol_num_z*stride_z+extra_vol_dim_z-vol_dim_z, \
+                                    vol_num_z*stride_z+extra_vol_dim_z)
                     y_interval_t = (vol_num_y*stride_y, \
                                     vol_num_y*stride_y+vol_dim_y)
                     x_interval_t = (vol_num_x*stride_x, \
                                     vol_num_x*stride_x+vol_dim_x)
                     # Append volume slice to list
                     interval_index_t = (z_interval_t, y_interval_t, x_interval_t)
-                # Edge cases
+                # 2. <=z, y, <=x
+                
+                if extra_vol_dim_y and vol_num_y == num_vols_y - 1 \
+                and vol_num_z*stride_z+vol_dim_z <= zdim \
+                and vol_num_x*stride_x+vol_dim_x <= xdim:
+                    #print("hør")
+                    #sys.exit()
+                    z_interval_t = (vol_num_z*stride_z, \
+                                    vol_num_z*stride_z+vol_dim_z)
+                    y_interval_t = (vol_num_y*stride_y+extra_vol_dim_y-vol_dim_y, \
+                                    vol_num_y*stride_y+extra_vol_dim_y)
+                    x_interval_t = (vol_num_x*stride_x, \
+                                    vol_num_x*stride_x+vol_dim_x)
+                    # Append volume slice to list
+                    interval_index_t = (z_interval_t, y_interval_t, x_interval_t)
+                
+                # 3. <=z, <=y, x
+                elif extra_vol_dim_x and vol_num_x == num_vols_x - 1 \
+                and vol_num_z*stride_z+vol_dim_z <= zdim \
+                and vol_num_y*stride_y+vol_dim_y <= ydim:
+                    #print("hir")
+                    #sys.exit()
+                    z_interval_t = (vol_num_z*stride_z, \
+                                    vol_num_z*stride_z+vol_dim_z)
+                    y_interval_t = (vol_num_y*stride_y, \
+                                    vol_num_y*stride_y+vol_dim_y)
+                    x_interval_t = (vol_num_x*stride_x+extra_vol_dim_x-vol_dim_x, \
+                                    vol_num_x*stride_x+extra_vol_dim_x)
+                    # Append volume slice to list
+                    interval_index_t = (z_interval_t, y_interval_t, x_interval_t)
+                # 4. z, y, <=x
+                elif extra_vol_dim_z and vol_num_z == num_vols_z - 1 \
+                and extra_vol_dim_y and vol_num_y == num_vols_y - 1 \
+                and vol_num_x*stride_x+vol_dim_x <= xdim:
+                    #print("h")
+                    #sys.exit()
+                    z_interval_t = (vol_num_z*stride_z+extra_vol_dim_z-vol_dim_z, \
+                                    vol_num_z*stride_z+extra_vol_dim_z)
+                    y_interval_t = (vol_num_y*stride_y+extra_vol_dim_y-vol_dim_y, \
+                                    vol_num_y*stride_y+extra_vol_dim_y)
+                    x_interval_t = (vol_num_x*stride_x, \
+                                    vol_num_x*stride_x+vol_dim_x)
+                    # Append volume slice to list
+                    interval_index_t = (z_interval_t, y_interval_t, x_interval_t)
+                # 5. <=z, y, x
+                elif extra_vol_dim_y and vol_num_y == num_vols_y - 1 \
+                and extra_vol_dim_x and vol_num_x == num_vols_x - 1 \
+                and vol_num_z*stride_z+vol_dim_z <= zdim:
+                    #print("e")
+                    #sys.exit()
+                    z_interval_t = (vol_num_z*stride_z, \
+                                    vol_num_z*stride_z+vol_dim_z)
+                    y_interval_t = (vol_num_y*stride_y+extra_vol_dim_y-vol_dim_y, \
+                                    vol_num_y*stride_y+extra_vol_dim_y)
+                    x_interval_t = (vol_num_x*stride_x+extra_vol_dim_x-vol_dim_x, \
+                                    vol_num_x*stride_x+extra_vol_dim_x)
+                    # Append volume slice to list
+                    interval_index_t = (z_interval_t, y_interval_t, x_interval_t)
+                # 6. z, <=y, x
+                elif extra_vol_dim_z and vol_num_z == num_vols_z - 1 \
+                and extra_vol_dim_x and vol_num_x == num_vols_x - 1 \
+                and vol_num_y*stride_y+vol_dim_y <= ydim:
+                    #print("o")
+                    #sys.exit()
+                    z_interval_t = (vol_num_z*stride_z+extra_vol_dim_z-vol_dim_z, \
+                                    vol_num_z*stride_z+extra_vol_dim_z)
+                    y_interval_t = (vol_num_y*stride_y, \
+                                    vol_num_y*stride_y+vol_dim_y)
+                    x_interval_t = (vol_num_x*stride_x+extra_vol_dim_x-vol_dim_x, \
+                                    vol_num_x*stride_x+extra_vol_dim_x)
+                    # Append volume slice to list
+                    interval_index_t = (z_interval_t, y_interval_t, x_interval_t)
+                # 7. z, y, x
+                elif extra_vol_dim_z and vol_num_z == num_vols_z - 1 \
+                and extra_vol_dim_y and vol_num_y == num_vols_y - 1 \
+                and extra_vol_dim_x and vol_num_x == num_vols_x - 1:
+                    #print("r")
+                    #sys.exit()
+                    z_interval_t = (vol_num_z*stride_z+extra_vol_dim_z-vol_dim_z, \
+                                    vol_num_z*stride_z+extra_vol_dim_z)
+                    y_interval_t = (vol_num_y*stride_y+extra_vol_dim_y-vol_dim_y, \
+                                    vol_num_y*stride_y+extra_vol_dim_y)
+                    x_interval_t = (vol_num_x*stride_x+extra_vol_dim_x-vol_dim_x, \
+                                    vol_num_x*stride_x+extra_vol_dim_x)
+                    # Append volume slice to list
+                    interval_index_t = (z_interval_t, y_interval_t, x_interval_t)
                 # If not extra vol dims
                 # 1. z, <=y, <=x
                 elif not extra_vol_dim_z and vol_num_z == num_vols_z - 1 \
@@ -481,23 +573,17 @@ def vol_get_subvols_interval_indexes_mask(vol_shape, subvol_shape, stride_shape,
                                     xdim)
                     # Append volume slice to list
                     interval_index_t = (z_interval_t, y_interval_t, x_interval_t)
-                # If extra vol dims
-                # 1. z, <=y, <=x
-                elif extra_vol_dim_z and vol_num_z == num_vols_z - 1 \
-                and vol_num_y*stride_y+vol_dim_y <= ydim \
-                and vol_num_x*stride_x+vol_dim_x <= xdim:
-                    z_interval_t = (vol_num_z*stride_z+extra_vol_dim_z-vol_dim_z, \
-                                    vol_num_z*stride_z+extra_vol_dim_z)
-                    y_interval_t = (vol_num_y*stride_y, \
-                                    vol_num_y*stride_y+vol_dim_y)
-                    x_interval_t = (vol_num_x*stride_x, \
-                                    vol_num_x*stride_x+vol_dim_x)
-                    # Append volume slice to list
-                    interval_index_t = (z_interval_t, y_interval_t, x_interval_t)
+                """
+                """
                 # 2. <=z, y, <=x
-                elif extra_vol_dim_y and vol_num_y == num_vols_y - 1 \
-                and vol_num_z*stride_z+vol_dim_z <= zdim \
-                and vol_num_x*stride_x+vol_dim_x <= xdim:
+                if vol_num_z*stride_z+vol_dim_z <= zdim \
+                and extra_vol_dim_y \
+                and vol_num_x*stride_x+vol_dim_x <= xdim \
+                and vol_num_z < num_vols_z - 1 \
+                and vol_num_y == num_vols_y - 1 \
+                and vol_num_x < num_vols_x - 1:
+                    #print("hør")
+                    #sys.exit()
                     z_interval_t = (vol_num_z*stride_z, \
                                     vol_num_z*stride_z+vol_dim_z)
                     y_interval_t = (vol_num_y*stride_y+extra_vol_dim_y-vol_dim_y, \
@@ -506,67 +592,46 @@ def vol_get_subvols_interval_indexes_mask(vol_shape, subvol_shape, stride_shape,
                                     vol_num_x*stride_x+vol_dim_x)
                     # Append volume slice to list
                     interval_index_t = (z_interval_t, y_interval_t, x_interval_t)
+                """
+                # Most cases
+                # Check that volume is within the index dimensions
+                if vol_num_z*stride_z+vol_dim_z <= zdim \
+                and vol_num_y*stride_y+vol_dim_y <= ydim \
+                and vol_num_x*stride_x+vol_dim_x <= xdim:# \
+                #and vol_num_z < num_vols_z - 1 \
+                #and vol_num_y < num_vols_y - 1 \
+                #and vol_num_x < num_vols_x - 1:
+                    #print(vol_num_x)
+                    # Create slice intervals, defining location of subvolume
+                    z_interval_t = (vol_num_z*stride_z, \
+                                    vol_num_z*stride_z+vol_dim_z)
+                    y_interval_t = (vol_num_y*stride_y, \
+                                    vol_num_y*stride_y+vol_dim_y)
+                    x_interval_t = (vol_num_x*stride_x, \
+                                    vol_num_x*stride_x+vol_dim_x)
+                    # Append volume slice to list
+                    interval_index_t = (z_interval_t, y_interval_t, x_interval_t)
+                """
                 # 3. <=z, <=y, x
-                elif extra_vol_dim_x and vol_num_x == num_vols_x - 1 \
-                and vol_num_z*stride_z+vol_dim_z <= zdim \
-                and vol_num_y*stride_y+vol_dim_y <= ydim:
+                if vol_num_z*stride_z+vol_dim_z <= zdim \
+                and vol_num_y*stride_y+vol_dim_y <= ydim \
+                and vol_num_x*stride_x+vol_dim_x < xdim \
+                and extra_vol_dim_x \
+                and vol_num_z < num_vols_z - 1 \
+                and vol_num_y < num_vols_y - 1 \
+                and vol_num_x == num_vols_x - 1:
+                    print("hir")
+                    #sys.exit()
                     z_interval_t = (vol_num_z*stride_z, \
                                     vol_num_z*stride_z+vol_dim_z)
                     y_interval_t = (vol_num_y*stride_y, \
                                     vol_num_y*stride_y+vol_dim_y)
-                    x_interval_t = (vol_num_x*stride_x+extra_vol_dim_x-vol_dim_x, \
-                                    vol_num_x*stride_x+extra_vol_dim_x)
+                    x_interval_t = (vol_num_x*stride_x+vol_dim_x-(vol_dim_x-extra_vol_dim_x)-1, \
+                                    vol_num_x*stride_x+vol_dim_x+extra_vol_dim_x-1)
+                    print(x_interval_t)
                     # Append volume slice to list
-                    interval_index_t = (z_interval_t, y_interval_t, x_interval_t)
-                # 4. z, y, <=x
-                elif extra_vol_dim_z and vol_num_z == num_vols_z - 1 \
-                and extra_vol_dim_y and vol_num_y == num_vols_y - 1 \
-                and vol_num_x*stride_x+vol_dim_x <= xdim:
-                    z_interval_t = (vol_num_z*stride_z+extra_vol_dim_z-vol_dim_z, \
-                                    vol_num_z*stride_z+extra_vol_dim_z)
-                    y_interval_t = (vol_num_y*stride_y+extra_vol_dim_y-vol_dim_y, \
-                                    vol_num_y*stride_y+extra_vol_dim_y)
-                    x_interval_t = (vol_num_x*stride_x, \
-                                    vol_num_x*stride_x+vol_dim_x)
-                    # Append volume slice to list
-                    interval_index_t = (z_interval_t, y_interval_t, x_interval_t)
-                # 5. <=z, y, x
-                elif extra_vol_dim_y and vol_num_y == num_vols_y - 1 \
-                and extra_vol_dim_x and vol_num_x == num_vols_x - 1 \
-                and vol_num_z*stride_z+vol_dim_z <= zdim:
-                    z_interval_t = (vol_num_z*stride_z, \
-                                    vol_num_z*stride_z+vol_dim_z)
-                    y_interval_t = (vol_num_y*stride_y+extra_vol_dim_y-vol_dim_y, \
-                                    vol_num_y*stride_y+extra_vol_dim_y)
-                    x_interval_t = (vol_num_x*stride_x+extra_vol_dim_x-vol_dim_x, \
-                                    vol_num_x*stride_x+extra_vol_dim_x)
-                    # Append volume slice to list
-                    interval_index_t = (z_interval_t, y_interval_t, x_interval_t)
-                # 6. z, <=y, x
-                elif extra_vol_dim_z and vol_num_z == num_vols_z - 1 \
-                and extra_vol_dim_x and vol_num_x == num_vols_x - 1 \
-                and vol_num_y*stride_y+vol_dim_y <= ydim:
-                    z_interval_t = (vol_num_z*stride_z+extra_vol_dim_z-vol_dim_z, \
-                                    vol_num_z*stride_z+extra_vol_dim_z)
-                    y_interval_t = (vol_num_y*stride_y, \
-                                    vol_num_y*stride_y+vol_dim_y)
-                    x_interval_t = (vol_num_x*stride_x+extra_vol_dim_x-vol_dim_x, \
-                                    vol_num_x*stride_x+extra_vol_dim_x)
-                    # Append volume slice to list
-                    interval_index_t = (z_interval_t, y_interval_t, x_interval_t)
-                # 7. z, y, x
-                elif extra_vol_dim_z and vol_num_z == num_vols_z - 1 \
-                and extra_vol_dim_y and vol_num_y == num_vols_y - 1 \
-                and extra_vol_dim_x and vol_num_x == num_vols_x - 1:
-                    z_interval_t = (vol_num_z*stride_z+extra_vol_dim_z-vol_dim_z, \
-                                    vol_num_z*stride_z+extra_vol_dim_z)
-                    y_interval_t = (vol_num_y*stride_y+extra_vol_dim_y-vol_dim_y, \
-                                    vol_num_y*stride_y+extra_vol_dim_y)
-                    x_interval_t = (vol_num_x*stride_x+extra_vol_dim_x-vol_dim_x, \
-                                    vol_num_x*stride_x+extra_vol_dim_x)
-                    # Append volume slice to list
-                    interval_index_t = (z_interval_t, y_interval_t, x_interval_t)
-                
+                    interval_index_extra_t = (z_interval_t, y_interval_t, x_interval_t)
+                """
                 if interval_index_t and mask_is_cube:
                     # Add subvol index with applied translation,
                     # thus placing the mask subvol at correct location
@@ -574,6 +639,15 @@ def vol_get_subvols_interval_indexes_mask(vol_shape, subvol_shape, stride_shape,
                     interval_indexes_l += [((ztrans+interval_index_t[0][0],ztrans+interval_index_t[0][1]),\
                                             (ytrans+interval_index_t[1][0],ytrans+interval_index_t[1][1]),
                                             (xtrans+interval_index_t[2][0],xtrans+interval_index_t[2][1]))]
+                    """
+                    if interval_index_extra_t:
+                        # Add subvol index with applied translation,
+                        # thus placing the mask subvol at correct location
+                        # in original space.
+                        interval_indexes_l += [((ztrans+interval_index_extra_t[0][0],ztrans+interval_index_extra_t[0][1]),\
+                                                (ytrans+interval_index_extra_t[1][0],ytrans+interval_index_extra_t[1][1]),
+                                                (xtrans+interval_index_extra_t[2][0],xtrans+interval_index_extra_t[2][1]))]
+                    """
                 
                 elif interval_index_t and not mask_is_cube and \
                     np.any(mask[interval_index_t[0][0]:interval_index_t[0][1], \
@@ -582,6 +656,15 @@ def vol_get_subvols_interval_indexes_mask(vol_shape, subvol_shape, stride_shape,
                     # If mask is not a cube, include subvol if it fits completely within the mask
                     # TODO: Method for translating and filling in partially matching vols
                     interval_indexes_l += [interval_index_t]
+                    """
+                    if interval_index_extra_t and \
+                        np.any(mask[interval_index_extra_t[0][0]:interval_index_extra_t[0][1], \
+                                    interval_index_extra_t[1][0]:interval_index_extra_t[1][1], \
+                                    interval_index_extra_t[2][0]:interval_index_extra_t[2][1]]):
+                        # If mask is not a cube, include subvol if it fits completely within the mask
+                        # TODO: Method for translating and filling in partially matching vols
+                        interval_indexes_l += [interval_index_extra_t]
+                    """
     
     return interval_indexes_l
 
@@ -1035,6 +1118,9 @@ if __name__ == "__main__":
     # cope with rapid spatial changes. However, this will slow down the interpolation. 
     # The default settings are good enough for capturing typical tumor growth (?)
     # Default:
+    # NOTE, TODO: 2020-01-15: When using --mask , the script currently only works 
+    # correctly with default subvol_shape and subvol_stride
+    # see vol_get_subvols_interval_indexes_mask
     subvol_shape = (3, 3, 3)
     subvol_stride = (2, 2, 2)
     #subvol_stride = (3, 3, 3)
@@ -1049,7 +1135,7 @@ if __name__ == "__main__":
 
     #subvol_shape = (6, 6, 6)
     #subvol_stride = (4, 4, 4)
-   
+    
     # Part 2: Parameters that may need to be changed depending on the computer.
     
     # The two parameters adjust how often 
@@ -1065,8 +1151,8 @@ if __name__ == "__main__":
     #subvols_mem_buffer_size = 1000
     #subvols_mem_buffer_size = 500
     # Automatic modes: comment out subvols_mem_buffer_size below
-    subvols_mem_buffer_size = "AutoChunksize"
-    #subvols_mem_buffer_size = "AutoTotNum"
+    #subvols_mem_buffer_size = "AutoChunksize"
+    subvols_mem_buffer_size = "AutoTotNum"
     
     # Should be large if you have a slow disk, but then you need a lot of RAM,
     # especially if you have many CPU cores and allow maximum CPU utilization;
@@ -1138,6 +1224,7 @@ if __name__ == "__main__":
         mask_data_arr = mask_spatialimg_resampled.get_fdata()
         mask_is_cube, mask_descriptions = check_if_mask_is_a_cube(mask_data_arr)
         interval_indexes_l = vol_get_subvols_interval_indexes_mask(vol_shape, subvol_shape, subvol_stride, mask_data_arr, (mask_is_cube, mask_descriptions))
+        #sys.exit()
     else:
         using_mask = False
         interval_indexes_l = vol_get_subvols_interval_indexes_all(vol_shape, subvol_shape, subvol_stride)
@@ -1169,7 +1256,7 @@ if __name__ == "__main__":
     
     print("selected shared memory object buffer size: %i" % shared_mem_obj_buffer_size)
     #print("selected chunksize: %i" % chunksize)
-    
+    #"""
     # Multiprocessing manager
     manager = mp.Manager()
         
@@ -1219,7 +1306,7 @@ if __name__ == "__main__":
     # Close the multiprocessing pool, joun for waiting for it to terminate
     mp_p.close()
     mp_p.join()
-    
+    #"""
     print("----------------------------------------------------------------")   
     print("                  Finished interpolation                        ")
     print("----------------------------------------------------------------")

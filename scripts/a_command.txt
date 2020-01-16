@@ -1,0 +1,1 @@
+python scripts/rbfinterp_mp_large.py --nifti $(ls Elies-longitudinal-data-test/*/Flair.nii.gz) --timeint $(cat Elies-longitudinal-data-test/timeints_mod.txt) --savedir Elies-longitudinal-data-test/interpolated

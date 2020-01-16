@@ -1182,7 +1182,7 @@ if __name__ == "__main__":
     # Main will run in a serparate process, thus subtract 1 from mp.cpu_count()
     # to utilize exactly all available cpu cores
     #num_workers = 3 # mp.cpu_count() - 1
-    num_workers = mp.cpu_count() - 1
+    num_workers = 4
    
     print("----------------------------------------------------------------")
     print("Welcome to the Radial Basis Function time interpolation routine!")
@@ -1227,6 +1227,8 @@ if __name__ == "__main__":
         #sys.exit()
     else:
         using_mask = False
+        mask_is_cube = False
+        mask_data_arr = np.array([])
         interval_indexes_l = vol_get_subvols_interval_indexes_all(vol_shape, subvol_shape, subvol_stride)
     
     #

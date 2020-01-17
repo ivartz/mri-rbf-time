@@ -1143,7 +1143,8 @@ if __name__ == "__main__":
     #subvols_mem_buffer_size = 1000
     #subvols_mem_buffer_size = 10
     # Automatic modes: comment out subvols_mem_buffer_size below
-    subvols_mem_buffer_size = "AutoChunksize"
+    #subvols_mem_buffer_size = "AutoChunksize"
+    subvols_mem_buffer_size = "AutoChunksize2"
     #subvols_mem_buffer_size = "AutoTotNum"
     
     # Should be large if you have a slow disk, but then you need a lot of RAM,
@@ -1231,6 +1232,9 @@ if __name__ == "__main__":
     if subvols_mem_buffer_size == "AutoChunksize":
         print("subvols_mem_buffer_size (chunksize) set to AutoChunksize")
         subvols_mem_buffer_size = calculate_default_chunksize(len(interval_indexes_l), num_workers-1) # num_workers-1 since one worker is already occupied by writer process.
+    elif subvols_mem_buffer_size == "AutoChunksize2":
+        print("subvols_mem_buffer_size (chunksize) set to AutoChunksize")
+        subvols_mem_buffer_size = 1+calculate_default_chunksize(len(interval_indexes_l), num_workers-1)//4
     elif subvols_mem_buffer_size == "AutoTotNum":
         print("subvols_mem_buffer_size (chunksize) set to AutoTotNum")
         if tot_num_subvols % (num_workers-1):

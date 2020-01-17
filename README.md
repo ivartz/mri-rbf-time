@@ -1,4 +1,4 @@
-# Longitudinal_Study
+# longitudinal-study
  
 # Radial Basis Function Interpolation on the time axis
 

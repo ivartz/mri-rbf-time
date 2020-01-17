@@ -39,14 +39,6 @@ def calculate_default_chunksize(num_items, num_workers):
     # https://github.com/python/cpython/blob/v3.8.0/Lib/multiprocessing/pool.py
     chunksize, extra = divmod(num_items, num_workers * 4)
     if extra:
-        #print("extra")
-        #print(extra)
-        """
-        if chunksize > 0:
-            chunksize -= 1
-        else:
-            chunksize += 1
-        """
         chunksize += 1
     if num_items == 0:
         chunksize = 0
@@ -828,7 +820,7 @@ def stitch_subvols_from_shared_mem_and_save(results_shared_mem_names_q, \
     pathlib.Path(save_dir + "/nii").mkdir(parents=False, exist_ok=True)
     
     # Create empty numpy array that is going to contain the stitched data
-    stitched_data = np.empty(tot_vol_shape)
+    stitched_data = np.empty(tot_vol_shape, dtype=np.float32)
     stitched_data.fill(np.nan)
     # Save the first version of the stitched data, individual files for each time point
     [np.savez(save_dir + "/raw/" + "{0:03d}".format(time_point+1) + "_raw_voxels.npz", data) \
@@ -933,8 +925,8 @@ def interpolate_subvol(z_interval_t, \
     # Increment the subvol buffer counter
     interpolate_subvol.num_subvols_buffered += 1
     
-    #print("interpolate %s: buffering interpolated subvols in memory; %i/%i" % \
-    #    (current_process_name, interpolate_subvol.num_subvols_buffered, interpolate_subvol.subvols_mem_buffer_size))
+    print("interpolate %s: buffering interpolated subvols in memory; %i/%i" % \
+        (current_process_name, interpolate_subvol.num_subvols_buffered, interpolate_subvol.subvols_mem_buffer_size))
     
     # Save last interpolated volumes that do not 100 percent fill shared memory
     if (interpolate_subvol.num_shared_mem_obj_completed == (interpolate_subvol.tot_num_subvols//interpolate_subvol.subvols_mem_buffer_size)//(interpolate_subvol.num_workers-1) and \
@@ -1149,10 +1141,10 @@ if __name__ == "__main__":
     #subvols_mem_buffer_size = 60000
     # For roi volumes
     #subvols_mem_buffer_size = 1000
-    #subvols_mem_buffer_size = 500
+    #subvols_mem_buffer_size = 10
     # Automatic modes: comment out subvols_mem_buffer_size below
-    #subvols_mem_buffer_size = "AutoChunksize"
-    subvols_mem_buffer_size = "AutoTotNum"
+    subvols_mem_buffer_size = "AutoChunksize"
+    #subvols_mem_buffer_size = "AutoTotNum"
     
     # Should be large if you have a slow disk, but then you need a lot of RAM,
     # especially if you have many CPU cores and allow maximum CPU utilization;
@@ -1181,8 +1173,8 @@ if __name__ == "__main__":
     # Otherwise make smaller if the program takes up too much resources.
     # Main will run in a serparate process, thus subtract 1 from mp.cpu_count()
     # to utilize exactly all available cpu cores
-    #num_workers = 3 # mp.cpu_count() - 1
-    num_workers = 4
+    #num_workers = mp.cpu_count() - 1
+    num_workers = 2
    
     print("----------------------------------------------------------------")
     print("Welcome to the Radial Basis Function time interpolation routine!")
@@ -1267,6 +1259,9 @@ if __name__ == "__main__":
     
     # The final shape of the total volumes interpolated over time (number of time units)
     tot_vol_shape = (np.sum(intervals_between_volumes_t),) + vol_shape
+
+    #print(tot_vol_shape)
+    #test = np.empty(tot_vol_shape, dtype=np.float32)
     
     # Initialize multiprocessing pool of num_workers workers # 
     mp_p = mp.Pool(num_workers, \

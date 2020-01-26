@@ -1,6 +1,11 @@
+import sys
 import datetime
 
-with open("ack-times.txt") as file:
+# Run
+# python get-timeints-days.py </path/to/ack-times.txt>
+
+#with open("ack-times.txt") as file:
+with open(sys.argv[1]) as file:
     lines = file.readlines()
 
 #print("number of time points: %i" % len(lines))

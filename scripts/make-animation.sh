@@ -1,5 +1,5 @@
 # Run
-# bash render-frames.sh <png path> <animation save path>
+# bash make-animation.sh <png path> <animation save path>
 
 #png_path="../data/output/elies_1_7_each_fourth/png"
 png_path=$1

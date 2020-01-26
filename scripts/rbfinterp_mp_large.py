@@ -925,8 +925,8 @@ def interpolate_subvol(z_interval_t, \
     # Increment the subvol buffer counter
     interpolate_subvol.num_subvols_buffered += 1
     
-    print("interpolate %s: buffering interpolated subvols in memory; %i/%i" % \
-        (current_process_name, interpolate_subvol.num_subvols_buffered, interpolate_subvol.subvols_mem_buffer_size))
+    #print("interpolate %s: buffering interpolated subvols in memory; %i/%i" % \
+    #    (current_process_name, interpolate_subvol.num_subvols_buffered, interpolate_subvol.subvols_mem_buffer_size))
     
     # Save last interpolated volumes that do not 100 percent fill shared memory
     if (interpolate_subvol.num_shared_mem_obj_completed == (interpolate_subvol.tot_num_subvols//interpolate_subvol.subvols_mem_buffer_size)//(interpolate_subvol.num_workers-1) and \
@@ -989,7 +989,7 @@ def interpolate_subvol(z_interval_t, \
         # from inclusion in the stitching process
         if interpolate_subvol.last_shared_mem_obj_buffer_and_will_be_non_full:
             #print("interpolate %s: warning: non-full new shared memory, setting shared old data to np.nan to avoid being saved (again)\nIf RAM allows it, set subvols_mem_buffer_size to 'Auto' for optimal performance\nOtherwise, lower subvols_mem_buffer_size for lower RAM usage\n(slower, but better than receiving a lot of\nthis message when using a large subvols_mem_buffer_size)" % current_process_name)
-            print("interpolate %s: warning: non-full new shared memory, setting shared old data to np.nan to avoid being saved (again)" % current_process_name)
+            #print("interpolate %s: warning: non-full new shared memory, setting shared old data to np.nan to avoid being saved (again)" % current_process_name)
             interpolate_subvol.subvol_mem_data_buffer[interpolate_subvol.num_subvols_buffered:] = np.nan
         
         # Copy the the result data into shared memory
@@ -1144,8 +1144,8 @@ if __name__ == "__main__":
     #subvols_mem_buffer_size = 10
     # Automatic modes: comment out subvols_mem_buffer_size below
     #subvols_mem_buffer_size = "AutoChunksize"
-    subvols_mem_buffer_size = "AutoChunksize2"
-    #subvols_mem_buffer_size = "AutoTotNum"
+    #subvols_mem_buffer_size = "AutoChunksize2"
+    subvols_mem_buffer_size = "AutoTotNum"
     
     # Should be large if you have a slow disk, but then you need a lot of RAM,
     # especially if you have many CPU cores and allow maximum CPU utilization;

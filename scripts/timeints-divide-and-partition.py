@@ -24,7 +24,7 @@ timeints_mod = np.array(timeints)//int(sys.argv[2])
 
 #print(timeints_mod)
 
-specif_interval = np.median(timeints_mod) # can also be max or min. Set to max if little RAM available
+specif_interval = np.max(timeints_mod) # can be median , max or min. Set to max if little RAM available
 
 #print("median interval was %i , using this as splitting measure" %specif_interval)
 

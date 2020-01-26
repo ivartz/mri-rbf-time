@@ -1,14 +1,26 @@
 # https://www.grymoire.com/Unix/Sed.html#uh-25
 
+# Usage:
+# bash scripts/run-tp.sh \
+#   <1 run commands or 0 only print commands>
+#   <patient oncohabitats dir> \
+#   <path/to/timeintsfile.txt> \
+#   <patient sequence results dir> \
+#   <path/to/maskfile.nii or 0 for no mask> \
+#   <interpolation time step>
+#   <max number of specific interval legths in partition>
+#   2>&1 | tee <path/to/runlog.txt>
+
 # 1: run script
 # 0: dbg, print bash commands
-run_evals=1
+#run_evals=0
+run_evals=$1
 
 # TODO
 #nifti_dir=
 
-patient_onco_data_dir=../Elies-longitudinal-data-test
-#patient_onco_data_dir=$1
+#patient_onco_data_dir=../Elies-longitudinal-data-test
+patient_onco_data_dir=$2
 
 # To make a timeints_mod.txt from a .txt with a date format, 
 # see scripts/get-timeints-days.py
@@ -20,22 +32,24 @@ patient_onco_data_dir=../Elies-longitudinal-data-test
 #python scripts/get-timeints-days.py ../Elies-longitudinal-data-test/ack-times.txt > timeints-days.txt
 # ack-times.txt was aquired form a dicom header reader program.
 
-timeints_days_file=$patient_onco_data_dir/timeints_mod.txt
-#timeints_days_file=$2
+#timeints_days_file=$patient_onco_data_dir/timeints_mod.txt
+timeints_days_file=$3
 
 #patient_sequence_output_dir=/media/ivar/SSD700GB/gitprojects/Longitudinal_Study/data/output/sailor-patient/FLAIR
-patient_sequence_output_dir=data/output/sailor-patient/FLAIR
-#patient_sequence_output_dir=$3
+patient_sequence_output_dir=$4
 
 #mask_file=$patient_onco_data_dir/flairbinmask.nii
-#mask_file=$4
 # Set to use no mask
-mask_file=0
+#mask_file=0
+mask_file=$5
+
 
 # Calculate how to optimal divide the inteprolation problem into partitions
 # along the time axis.
-time_step=5
-max_num_specif_intervals=1 # see timeints-divide-and-partition.py
+#time_step=5
+time_step=$6
+#max_num_specif_intervals=0 # see timeints-divide-and-partition.py
+max_num_specif_intervals=$7
 readarray timeints_partitions_arr < <(python scripts/timeints-divide-and-partition.py \
     $timeints_days_file \
     $time_step \
@@ -60,7 +74,7 @@ num_processed_volumes=0
 #for partitions in "${timeints_partitions_arr[@]}"; do
 for (( i = 0 ; i < ${#timeints_partitions_arr[@]} ; i++ )) ; do
     timeints=${timeints_partitions_arr[i]}
-    echo $timeints
+    #echo $timeints
     #read -a timeints_arr <<< $timeints
     timeints_arr=($timeints)
     num_timeints=${#timeints_arr[@]}
@@ -76,7 +90,7 @@ for (( i = 0 ; i < ${#timeints_partitions_arr[@]} ; i++ )) ; do
     niftis=$(ls $patient_onco_data_dir/*/Flair.nii.gz \
         | sed -n "$exam_num_begin,$exam_num_end p")
         
-    savedir=$patient_sequence_output_dir/exam-$exam_num_begin-$exam_num_end
+    savedir=$patient_sequence_output_dir/$exam_num_begin-$exam_num_end
     
     #echo $niftis
     #echo $timeints
@@ -126,7 +140,7 @@ for (( i = 0 ; i < ${#timeints_partitions_arr[@]} ; i++ )) ; do
         # (the one in this partition with number first_volume_number)
         # with the mean version
         printf -v number_padded "%03d" $first_volume_number
-        prev_savedir=$patient_sequence_output_dir/exam-$prev_exam_num_begin-$exam_num_begin
+        prev_savedir=$patient_sequence_output_dir/$prev_exam_num_begin-$exam_num_begin
         prev_nii=$prev_savedir/nii/$number_padded.nii
         mean_niftis_command="python scripts/mean-nifti.py $prev_nii $savedir/nii/$number_padded.nii $savedir/nii/$number_padded.nii"
         echo $mean_niftis_command
@@ -141,7 +155,7 @@ for (( i = 0 ; i < ${#timeints_partitions_arr[@]} ; i++ )) ; do
     # Render .png snapshot of .nii files 
     # using fsleyes
     # Will be saved in $savedir/png
-    render_command="bash scripts/render-frames.sh $savedir/nii $savedir/png"
+    render_command="bash scripts/render-frames-tp.sh $savedir/nii $savedir/png"
     echo $render_command
     #
     if [ $run_evals == 1 ] ; then

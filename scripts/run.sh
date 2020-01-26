@@ -23,7 +23,8 @@ patient_onco_data_dir=../Elies-longitudinal-data-test
 timeints_days_file=$patient_onco_data_dir/timeints_mod.txt
 #timeints_days_file=$2
 
-patient_sequence_output_dir=/media/ivar/SSD700GB/gitprojects/Longitudinal_Study/data/output/sailor-patient/FLAIR
+#patient_sequence_output_dir=/media/ivar/SSD700GB/gitprojects/Longitudinal_Study/data/output/sailor-patient/FLAIR
+patient_sequence_output_dir=data/output/sailor-patient/FLAIR
 #patient_sequence_output_dir=$3
 
 #mask_file=$patient_onco_data_dir/flairbinmask.nii

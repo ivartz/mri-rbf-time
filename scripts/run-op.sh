@@ -2,7 +2,7 @@
 
 # 1: run script
 # 0: dbg, print bash commands
-run_evals=1
+run_evals=0
 
 # TODO
 #nifti_dir=
@@ -141,7 +141,7 @@ for (( i = 0 ; i < ${#timeints_partitions_arr[@]} ; i++ )) ; do
     # Render .png snapshot of .nii files 
     # using fsleyes
     # Will be saved in $savedir/png
-    render_command="bash scripts/render-frames.sh $savedir/nii $savedir/png"
+    render_command="bash scripts/render-frames-op.sh $savedir/nii $savedir/png"
     echo $render_command
     #
     if [ $run_evals == 1 ] ; then

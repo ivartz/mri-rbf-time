@@ -14,6 +14,9 @@ import pathlib
 import sys
 import torch
 import gc
+import os.path
+sys.path.append('/home/ivar/Downloads/keops') # For enabling import of pykeops
+#from pykeops.torch import LazyTensor
 
 # _t suffix in names means tuple
 # _l suffix in names means list
@@ -249,10 +252,9 @@ def put_data_in_shared_mem_torch(data, device='cpu'):
     del data
     
     # Force free memory
-    if device == 'cuda':
-        torch.cuda.empty_cache()
-        
-        torch.cuda.ipc_collect()
+    torch.cuda.empty_cache()
+    
+    torch.cuda.ipc_collect()
     
     gc.collect()
     
@@ -1201,9 +1203,9 @@ def interpolate_subvol(interval_index_t):
     # Increment the subvol buffer counter
     interpolate_subvol.num_subvols_buffered += 1
     
-    print("interpolate %s: buffering interpolated subvols in memory; %i/%i" % \
-        (current_process_name, interpolate_subvol.num_subvols_buffered, interpolate_subvol.subvols_mem_buffer_size))
-    sys.stdout.flush()
+    #print("interpolate %s: buffering interpolated subvols in memory; %i/%i" % \
+    #    (current_process_name, interpolate_subvol.num_subvols_buffered, interpolate_subvol.subvols_mem_buffer_size))
+    #sys.stdout.flush()
     
     # Save last interpolated volumes that do not 100 percent fill shared memory
     if (interpolate_subvol.num_shared_mem_obj_completed == (interpolate_subvol.tot_num_subvols//interpolate_subvol.subvols_mem_buffer_size)//(interpolate_subvol.num_workers) and \
@@ -1310,9 +1312,8 @@ def interpolate_subvol_init(volumes_data_shared_mem, \
     #import sys
     #sys.path.append('/home/ivar/Downloads/keops') # For enabling import of pykeops
     #import pykeops
-    if interpolate_backend != "scipy_cpu":
-        from pykeops.torch import LazyTensor
-    
+    from pykeops.torch import LazyTensor
+                                
     # The queue containing names of the shared memory 
     # containing the results: indices and interpolated data
     interpolate_subvol.results_shared_mem_names_q = results_shared_mem_names_q
@@ -1446,8 +1447,8 @@ if __name__ == "__main__":
     # Parse the command line
     args = CLI.parse_args()
     
-    interpolate_backend = "scipy_cpu"
-    #interpolate_backend = "pykeops_cpu"
+    #interpolate_backend = "scipy_cpu"
+    interpolate_backend = "pykeops_cpu"
     #interpolate_backend = "pykeops_cpu_gpu"
     #interpolate_backend = "pykeops_gpu"
     
@@ -1456,17 +1457,13 @@ if __name__ == "__main__":
         # Required for using CUDA in subprocesses. 
         # By default, "fork" will not work.
         mp.set_start_method('spawn')
-        import os
-        import os.path
-        #sys.path.append(os.getcwd()+'/lib/keops-master') # For enabling import of pykeops
-        sys.path.append('/home/ivar/Downloads/keops') # For enabling import of pykeops
     
     # The number of workers. Make a large as possible, recommended number of cpu cores (mp.cpu_count()) - 1
     # Otherwise make smaller if the program takes up too much resources.
     # Main will run in a serparate process, thus subtract 1 from mp.cpu_count()
     # to utilize exactly all available cpu cores
     #num_workers = mp.cpu_count() - 1
-    num_workers = 1
+    num_workers = 3
     
     # Set the shape of each subvolume that is unterpolated over time
     # 20, 20, 20 was the maximum shape on a 32 GB RAM machine before memory error

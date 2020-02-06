@@ -9,6 +9,7 @@
 #   <path/to/maskfile.nii or 0 for no mask> \
 #   <interpolation time step>
 #   <max number of specific interval legths in partition>
+#   <usegpu>
 #   2>&1 | tee <path/to/runlog.txt>
 
 # 1: run script
@@ -55,6 +56,8 @@ readarray timeints_partitions_arr < <(python scripts/timeints-divide-and-partiti
     $time_step \
     $max_num_specif_intervals)
 
+usegpu=$8
+
 # Make common folder for png files of inteprolated data
 png_folder=$patient_sequence_output_dir/png
 # Make directory if not exists
@@ -100,12 +103,12 @@ for (( i = 0 ; i < ${#timeints_partitions_arr[@]} ; i++ )) ; do
     # Will create .nii and raw .npz files
     # in $savedir
     if [ $mask_file == 0 ]; then
-        interpolate_command="python scripts/rbfinterp_mp_large.py \
+        interpolate_command="python scripts/rbfinterp_mp_large_gpu2.py \
         --nifti $niftis \
         --timeint $timeints \
         --savedir $savedir"
     else
-        interpolate_command="python scripts/rbfinterp_mp_large.py \
+        interpolate_command="python scripts/rbfinterp_mp_large_gpu2.py \
         --nifti $niftis \
         --timeint $timeints \
         --mask $mask_file \

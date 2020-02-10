@@ -136,14 +136,18 @@ def interpolate_volume_elements_to_linear_time_torch(kernel_func, \
     # GPU    
     # Transfer to GPU    
     b = torch.tensor(b, dtype=torch.float32, device=torch.device(device)).view(-1,1)
+    
+    epsilon = \
+    torch.from_numpy(np.array(kernel_func.calculate_default_epsilon_rbf_multiquadric_4D(x), dtype=np.float32)).to(device=torch.device(device))
+    
     x = torch.tensor(x, dtype=torch.float32, device=torch.device(device))
     
     #del data
     #del data_flattened
     
-    K_xx = kernel_func(x, x, epsilon="Default", device=device)
+    K_xx = kernel_func(x, x, epsilon=epsilon, device=device)
     
-    epsilon = kernel_func.epsilon
+    #epsilon = kernel_func.epsilon
     
     #print("er det her den stopper?")
     #sys.stdout.flush()
@@ -1383,32 +1387,37 @@ def interpolate_subvol_init(volumes_data_shared_mem, \
         # https://www.kernel-operations.io/keops/api/math-operations.html
         # In other words, that multiquadric_kernel does not define a
         # symmetric, positive and definite linear reduction (?)
-        
+        """
         if epsilon=="Default":
             epsilon = \
             calculate_default_epsilon_rbf_multiquadric_4D(x.cpu().numpy())
-        multiquadric_kernel.epsilon = \
-        torch.tensor(epsilon, dtype=torch.float32, device=torch.device(device))
-        
+            multiquadric_kernel.epsilon = \
+            torch.tensor(epsilon, dtype=torch.float32, device=torch.device(device))
+        """
         x_i = LazyTensor(x[:, None, :])  # (M, 1, :)
         y_j = LazyTensor(y[None, :, :])  # (1, N, :)
         D_ij = ((x_i - y_j) ** 2).sum(-1)  # (M, N) symbolic matrix of squared distances
-        return ((1/multiquadric_kernel.epsilon * D_ij) ** 2 + 1).sqrt()
+        return ((1/epsilon * D_ij) ** 2 + 1).sqrt()
         
     interpolate_subvol.multiquadric_kernel = multiquadric_kernel
     
     def gaussian_kernel(x, y, epsilon="Default", device='cpu'):
+        """
         if epsilon=="Default":
             epsilon = \
             calculate_default_epsilon_rbf_multiquadric_4D(x.cpu().numpy())
-        gaussian_kernel.epsilon = \
-        torch.tensor(epsilon, dtype=torch.float32, device=torch.device(device))
+            gaussian_kernel.epsilon = \
+            torch.tensor(epsilon, dtype=torch.float32, device=torch.device(device))
+        """
         x_i = LazyTensor(x[:, None, :])  # (M, 1, 1)
         y_j = LazyTensor(y[None, :, :])  # (1, N, 1)
         D_ij = ((x_i - y_j) ** 2).sum(-1)  # (M, N) symbolic matrix of squared distances
-        return (- D_ij / (2 * gaussian_kernel.epsilon ** 2)).exp()  # (M, N) symbolic Gaussian kernel matrix
+        return (- D_ij / (2 * epsilon ** 2)).exp()  # (M, N) symbolic Gaussian kernel matrix
     
     interpolate_subvol.gaussian_kernel = gaussian_kernel
+    
+    interpolate_subvol.gaussian_kernel.calculate_default_epsilon_rbf_multiquadric_4D = \
+    calculate_default_epsilon_rbf_multiquadric_4D
 
 
 if __name__ == "__main__":
@@ -1446,8 +1455,8 @@ if __name__ == "__main__":
     # Parse the command line
     args = CLI.parse_args()
     
-    interpolate_backend = "scipy_cpu"
-    #interpolate_backend = "pykeops_cpu"
+    #interpolate_backend = "scipy_cpu"
+    interpolate_backend = "pykeops_cpu"
     #interpolate_backend = "pykeops_cpu_gpu"
     #interpolate_backend = "pykeops_gpu"
     
@@ -1466,7 +1475,7 @@ if __name__ == "__main__":
     # Main will run in a serparate process, thus subtract 1 from mp.cpu_count()
     # to utilize exactly all available cpu cores
     #num_workers = mp.cpu_count() - 1
-    num_workers = 1
+    num_workers = 10
     
     # Set the shape of each subvolume that is unterpolated over time
     # 20, 20, 20 was the maximum shape on a 32 GB RAM machine before memory error
@@ -1591,10 +1600,13 @@ if __name__ == "__main__":
         subvols_mem_buffer_size = calculate_default_chunksize(len(interval_indexes_l), num_workers) # num_workers since one worker is already occupied by writer process.
     elif subvols_mem_buffer_size == "AutoChunksize2":
         print("subvols_mem_buffer_size (chunksize) set to AutoChunksize")
-        subvols_mem_buffer_size = 1+calculate_default_chunksize(len(interval_indexes_l), num_workers)//4
+        if calculate_default_chunksize(len(interval_indexes_l), num_workers) % 4:
+            subvols_mem_buffer_size = 1+calculate_default_chunksize(len(interval_indexes_l), num_workers)//4
+        else:
+            subvols_mem_buffer_size = calculate_default_chunksize(len(interval_indexes_l), num_workers)//4
     elif subvols_mem_buffer_size == "AutoTotNum":
         print("subvols_mem_buffer_size (chunksize) set to AutoTotNum")
-        if tot_num_subvols % (num_workers):
+        if tot_num_subvols % num_workers:
             subvols_mem_buffer_size = 1+(tot_num_subvols//(num_workers))
         else:
             subvols_mem_buffer_size = tot_num_subvols//(num_workers)
@@ -1607,7 +1619,11 @@ if __name__ == "__main__":
     
     if shared_mem_obj_buffer_size == "Auto":
         print("shared_mem_obj_buffer_size set to Auto")
-        shared_mem_obj_buffer_size = 2+((tot_num_subvols//(num_workers))//subvols_mem_buffer_size)
+        #shared_mem_obj_buffer_size = 2+((tot_num_subvols//(num_workers))//subvols_mem_buffer_size)
+        if tot_num_subvols % subvols_mem_buffer_size:
+            shared_mem_obj_buffer_size = 1+(tot_num_subvols//subvols_mem_buffer_size)
+        else:
+            shared_mem_obj_buffer_size = tot_num_subvols//subvols_mem_buffer_size
     
     print("selected shared memory object buffer size: %i" % shared_mem_obj_buffer_size)
     #print("selected chunksize: %i" % chunksize)

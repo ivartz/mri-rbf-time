@@ -103,12 +103,12 @@ for (( i = 0 ; i < ${#timeints_partitions_arr[@]} ; i++ )) ; do
     # Will create .nii and raw .npz files
     # in $savedir
     if [ $mask_file == 0 ]; then
-        interpolate_command="python scripts/rbfinterp_mp_large_gpu2.py \
+        interpolate_command="python scripts/rbfinterp_mp_large.py \
         --nifti $niftis \
         --timeint $timeints \
         --savedir $savedir"
     else
-        interpolate_command="python scripts/rbfinterp_mp_large_gpu2.py \
+        interpolate_command="python scripts/rbfinterp_mp_large.py \
         --nifti $niftis \
         --timeint $timeints \
         --mask $mask_file \

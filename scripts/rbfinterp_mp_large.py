@@ -1218,7 +1218,7 @@ def interpolate_subvol(interval_index_t):
     """
     #"""
     if interpolate_subvol.num_extra_subvols_included and \
-       interpolate_subvol.num_shared_mem_obj_completed == interpolate_subvol.shared_mem_obj_buffer_size and \
+       interpolate_subvol.num_shared_mem_obj_buffered == interpolate_subvol.shared_mem_obj_buffer_size -1 and \
        interpolate_subvol.num_subvols_buffered >= \
        (interpolate_subvol.num_extra_subvols_included - \
        interpolate_subvol.number_of_subvols_missing_before_no_remainder(interpolate_subvol.num_extra_subvols_included, interpolate_subvol.num_workers))\
@@ -1506,7 +1506,7 @@ if __name__ == "__main__":
     # Main will run in a serparate process, thus subtract 1 from mp.cpu_count()
     # to utilize exactly all available cpu cores
     #num_workers = mp.cpu_count() - 1
-    #num_workers = 9
+    #num_workers = 10
     num_workers = 3
     
     # Set the shape of each subvolume that is unterpolated over time

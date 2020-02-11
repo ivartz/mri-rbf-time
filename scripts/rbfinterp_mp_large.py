@@ -1075,6 +1075,9 @@ def stitch_subvols_from_shared_mem_and_save(results_shared_mem_names_q, \
                                dtype=np.float32, \
                                buffer=subvol_mem_data_shared_buffer.buf)
                 
+                #print(subvol_mem_data_buffer_numpy)
+                #sys.stdout.flush()
+                
                 # TODO: Slows down?
                 num_subvols_received = np.sum([1 for v in subvol_mem_data_buffer_numpy[:, 0] if not np.all(np.isnan(v))])
                 
@@ -1129,8 +1132,8 @@ def interpolate_subvol(interval_index_t):
     #torch.cuda.ipc_collect()
     
     # Perform the actual interpolation
-    #print("interpolate %s: received intervals for interpolating subvol" % current_process_name)
-    #sys.stdout.flush()
+    print("interpolate %s: received intervals for interpolating subvol" % current_process_name)
+    sys.stdout.flush()
     
     # 
     if interpolate_subvol.interpolate_backend == "scipy_cpu":
@@ -1185,6 +1188,7 @@ def interpolate_subvol(interval_index_t):
     
     # Store the result data in local subvol buffers
     #print("interpolate %s: putting interpolated data into memory buffer" % current_process_name)
+    #sys.stdout.flush()
     interpolate_subvol.subvol_mem_index_buffer[interpolate_subvol.num_subvols_buffered] = index_array
     interpolate_subvol.subvol_mem_data_buffer[interpolate_subvol.num_subvols_buffered] = data_interpolated
     
@@ -1201,9 +1205,9 @@ def interpolate_subvol(interval_index_t):
     # Increment the subvol buffer counter
     interpolate_subvol.num_subvols_buffered += 1
     
-    #print("interpolate %s: buffering interpolated subvols in memory; %i/%i" % \
-    #    (current_process_name, interpolate_subvol.num_subvols_buffered, interpolate_subvol.subvols_mem_buffer_size))
-    #sys.stdout.flush()
+    print("interpolate %s: buffering interpolated subvols in memory; %i/%i" % \
+        (current_process_name, interpolate_subvol.num_subvols_buffered, interpolate_subvol.subvols_mem_buffer_size))
+    sys.stdout.flush()
     
     # Save last interpolated volumes that do not 100 percent fill shared memory
     """
@@ -1214,13 +1218,15 @@ def interpolate_subvol(interval_index_t):
     """
     #"""
     if interpolate_subvol.num_extra_subvols_included and \
-       interpolate_subvol.num_shared_mem_obj_completed == interpolate_subvol.shared_mem_obj_buffer_size - 1 and \
+       interpolate_subvol.num_shared_mem_obj_completed == interpolate_subvol.shared_mem_obj_buffer_size and \
        interpolate_subvol.num_subvols_buffered >= \
        (interpolate_subvol.num_extra_subvols_included - \
        interpolate_subvol.number_of_subvols_missing_before_no_remainder(interpolate_subvol.num_extra_subvols_included, interpolate_subvol.num_workers))\
        //interpolate_subvol.num_workers:
     #"""
         # 
+        print("interpolate %s: incomplete last shared memory buffer encountered, signaling to write to disk" % current_process_name)
+        sys.stdout.flush()
         interpolate_subvol.last_shared_mem_obj_buffer_and_will_be_non_full = True
     
     # Only share result data as completely filled shared memory, except when the last potential incomplete
@@ -1228,28 +1234,33 @@ def interpolate_subvol(interval_index_t):
     if interpolate_subvol.num_subvols_buffered == interpolate_subvol.subvols_mem_buffer_size or \
         interpolate_subvol.last_shared_mem_obj_buffer_and_will_be_non_full:
         
+        print("interpolate %s: memory buffer full, time to copy into shared memory for stitching" % current_process_name)
+        sys.stdout.flush()
+        
         # Reset buffer of shared objects if treshold exceeded
         if interpolate_subvol.num_shared_mem_obj_buffered == interpolate_subvol.shared_mem_obj_buffer_size:
             # shared memory objects buffer exceeded, will overwrite old shared memory objects
             # hope that the computer managed to write the data to disk in time
             # Reset the shared memory objects buffer counter
             print("interpolate %s: warning: shared memory object buffer full. Assuming data was written to disk in time, resetting buffer counter" % current_process_name)
-            interpolate_subvol.num_shared_mem_obj_buffered = 0
             sys.stdout.flush()
+            interpolate_subvol.num_shared_mem_obj_buffered = 0
             
         # Close and unlink old shared objects at object buffer location if available
         if interpolate_subvol.shared_mem_obj_buffer[interpolate_subvol.num_shared_mem_obj_buffered] != None:
             # Assuming the data in the shared memory had enought time to be written to disk
             # Close access to the shared memory from this process
             # Also, unlink the shared objects, and thus freeing up memory
+            print("interpolate %s: closing access to shared memory" % current_process_name)
+            sys.stdout.flush()
             interpolate_subvol.shared_mem_obj_buffer[interpolate_subvol.num_shared_mem_obj_buffered][0].close()
             interpolate_subvol.shared_mem_obj_buffer[interpolate_subvol.num_shared_mem_obj_buffered][1].close()
-            interpolate_subvol.shared_mem_obj_buffer[interpolate_subvol.num_shared_mem_obj_buffered][0].unlink()
-            interpolate_subvol.shared_mem_obj_buffer[interpolate_subvol.num_shared_mem_obj_buffered][1].unlink()
+            #interpolate_subvol.shared_mem_obj_buffer[interpolate_subvol.num_shared_mem_obj_buffered][0].unlink()
+            #interpolate_subvol.shared_mem_obj_buffer[interpolate_subvol.num_shared_mem_obj_buffered][1].unlink()
         
         # Prepare shared memory objects for sharing result data with the image stitching process
         # https://docs.python.org/3.8/library/multiprocessing.shared_memory.html#multiprocessing.shared_memory.SharedMemory
-        #print("interpolate %s: memory buffer full, time to copy into shared memory for stitching" % current_process_name)
+        
         subvol_mem_index_shared_buffer = \
             shared_memory.SharedMemory(create=True, \
             size=interpolate_subvol.subvol_mem_index_buffer.nbytes)
@@ -1278,7 +1289,8 @@ def interpolate_subvol(interval_index_t):
         # from inclusion in the stitching process
         if interpolate_subvol.last_shared_mem_obj_buffer_and_will_be_non_full:
             #print("interpolate %s: warning: non-full new shared memory, setting shared old data to np.nan to avoid being saved (again)\nIf RAM allows it, set subvols_mem_buffer_size to 'Auto' for optimal performance\nOtherwise, lower subvols_mem_buffer_size for lower RAM usage\n(slower, but better than receiving a lot of\nthis message when using a large subvols_mem_buffer_size)" % current_process_name)
-            #print("interpolate %s: warning: non-full new shared memory, setting shared old data to np.nan to avoid being saved (again)" % current_process_name)
+            print("interpolate %s: warning: non-full new shared memory, setting shared old data to np.nan to avoid being saved (again)" % current_process_name)
+            sys.stdout.flush()
             interpolate_subvol.subvol_mem_data_buffer[interpolate_subvol.num_subvols_buffered:] = np.nan
         
         # Copy the the result data into shared memory
@@ -1290,7 +1302,8 @@ def interpolate_subvol(interval_index_t):
         
         # Put the names of the shared memory to the queue for letting the image stitching process
         # access the shared memory by the using these names
-        #print("interpolate %s: putting shared memory names of interpolated data into queue" % current_process_name)
+        print("interpolate %s: putting shared memory names of interpolated data into queue" % current_process_name)
+        sys.stdout.flush()
         interpolate_subvol.results_shared_mem_names_q.put_nowait((interpolate_subvol.shared_mem_obj_buffer[interpolate_subvol.num_shared_mem_obj_buffered][0].name, \
                                                                   interpolate_subvol.shared_mem_obj_buffer[interpolate_subvol.num_shared_mem_obj_buffered][1].name))
         
@@ -1493,7 +1506,8 @@ if __name__ == "__main__":
     # Main will run in a serparate process, thus subtract 1 from mp.cpu_count()
     # to utilize exactly all available cpu cores
     #num_workers = mp.cpu_count() - 1
-    num_workers = 2
+    #num_workers = 9
+    num_workers = 3
     
     # Set the shape of each subvolume that is unterpolated over time
     # 20, 20, 20 was the maximum shape on a 32 GB RAM machine before memory error
@@ -1539,8 +1553,8 @@ if __name__ == "__main__":
     #subvols_mem_buffer_size = 10
     # Automatic modes: comment out subvols_mem_buffer_size below
     #subvols_mem_buffer_size = "AutoChunksize"
-    #subvols_mem_buffer_size = "AutoChunksize2"
-    subvols_mem_buffer_size = "AutoTotNum"
+    subvols_mem_buffer_size = "AutoChunksize2"
+    #subvols_mem_buffer_size = "AutoTotNum"
     
     # Should be large if you have a slow disk, but then you need a lot of RAM,
     # especially if you have many CPU cores and allow maximum CPU utilization;
@@ -1635,9 +1649,9 @@ if __name__ == "__main__":
         #shared_mem_obj_buffer_size = 2+((tot_num_subvols//(num_workers))//subvols_mem_buffer_size)
         #if (tot_num_subvols/num_workers) % subvols_mem_buffer_size:
         if num_extra_subvols_included:
-            shared_mem_obj_buffer_size = 1+np.int32(1+((tot_num_subvols/num_workers)//subvols_mem_buffer_size))
+            shared_mem_obj_buffer_size = np.int32(1+((tot_num_subvols/num_workers)//subvols_mem_buffer_size))
         else:
-            shared_mem_obj_buffer_size = 1+np.int32((tot_num_subvols/num_workers)//subvols_mem_buffer_size)
+            shared_mem_obj_buffer_size = np.int32((tot_num_subvols/num_workers)//subvols_mem_buffer_size)
     
     print("selected shared memory object buffer size: %i" % shared_mem_obj_buffer_size)
     #print("selected chunksize: %i" % chunksize)
@@ -1665,7 +1679,7 @@ if __name__ == "__main__":
     
     # The final shape of the total volumes interpolated over time (number of time units)
     tot_vol_shape = (np.sum(intervals_between_volumes_t),) + vol_shape
-    
+    #"""
     # Initialize multiprocessing pool of num_workers workers
     mp_p = mp.Pool(num_workers, \
                    interpolate_subvol_init, \
@@ -1682,7 +1696,7 @@ if __name__ == "__main__":
                              num_extra_subvols_included, \
                              results_shared_mem_names_q) \
                    ) # maxtasksperchild=1
-
+    #"""
     # Start process that listens for names of shared memory 
     # on results_shared_mem_names_qand that can be used to 
     # access result data from interpolation processes.
@@ -1705,6 +1719,7 @@ if __name__ == "__main__":
     
     # Interpolate subvols in paralell
     #mp_p.starmap(interpolate_subvol, interval_indexes_l, chunksize=subvols_mem_buffer_size)
+    
     mp_p.map(interpolate_subvol, interval_indexes_l, chunksize=subvols_mem_buffer_size)
     
     # Interpolation processes is finished, so put a finish messages to results_shared_mem_names_q in order to end
@@ -1713,8 +1728,10 @@ if __name__ == "__main__":
     
     # Close the multiprocessing pool, joun for waiting for it to terminate
     sp.join()
+    
     mp_p.close()
     mp_p.join()
+    
     if interpolate_backend == "scipy_cpu":
         volumes_data_shared_mem_obj.close()
         volumes_data_shared_mem_obj.unlink()

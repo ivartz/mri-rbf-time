@@ -1,6 +1,6 @@
 
 patient_sequence_output_dir=\
-/media/ivar/SSD700GB/gitprojects/Longitudinal_Study/data/output/sailor-patient/FLAIR-gauss
+/media/ivar/SSD700GB/gitprojects/Longitudinal_Study/data/output/sailor-patient/FLAIR-gauss-2
 
 [ -d $patient_sequence_output_dir ] || mkdir -p $patient_sequence_output_dir
 

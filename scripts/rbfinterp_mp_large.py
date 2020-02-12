@@ -44,8 +44,8 @@ def flatten_tensor(T):
     
 def calculate_chunksize(num_items, num_workers, num_parts):
     chunksize, extra = divmod(num_items, num_workers * num_parts)
-    if extra:
-        chunksize += 1
+    #if extra:
+    #    chunksize += 1
     return chunksize, extra
 """
 def calculate_default_epsilon_rbf_multiquadric_4D(x):
@@ -1115,6 +1115,8 @@ def stitch_subvols_from_shared_mem_and_save(results_shared_mem_names_q, \
                 # shared memory instance any more
                 subvol_mem_index_shared_buffer.close()
                 subvol_mem_data_shared_buffer.close()
+                subvol_mem_index_shared_buffer.unlink()
+                subvol_mem_data_shared_buffer.unlink()
                 
                 # 
                 del subvol_mem_index_buffer_numpy
@@ -1217,15 +1219,15 @@ def interpolate_subvol(interval_index_t):
         #print("BAM!")
     """
     #"""
-    if interpolate_subvol.num_extra_subvols_included and \
-       interpolate_subvol.num_shared_mem_obj_buffered == interpolate_subvol.shared_mem_obj_buffer_size -1 and \
+    if interpolate_subvol.num_extra_subvols and \
+       ((interpolate_subvol.num_shared_mem_obj_completed + 1) // interpolate_subvol.shared_mem_obj_buffer_size) == interpolate_subvol.shared_mem_obj_buffer_size and \
        interpolate_subvol.num_subvols_buffered >= \
-       (interpolate_subvol.num_extra_subvols_included - \
-       interpolate_subvol.number_of_subvols_missing_before_no_remainder(interpolate_subvol.num_extra_subvols_included, interpolate_subvol.num_workers))\
+       (interpolate_subvol.num_extra_subvols - \
+       interpolate_subvol.number_of_subvols_missing_before_no_remainder(interpolate_subvol.num_extra_subvols, interpolate_subvol.num_workers))\
        //interpolate_subvol.num_workers:
     #"""
         # 
-        print("interpolate %s: incomplete last shared memory buffer encountered, signaling to write to disk" % current_process_name)
+        print("interpolate %s: warning: incomplete last shared memory buffer encountered, signaling to write to disk" % current_process_name)
         sys.stdout.flush()
         interpolate_subvol.last_shared_mem_obj_buffer_and_will_be_non_full = True
     
@@ -1329,7 +1331,7 @@ def interpolate_subvol_init(volumes_data_shared_mem, \
                             tot_num_subvols, \
                             num_workers, \
                             interpolate_backend, \
-                            num_extra_subvols_included, \
+                            num_extra_subvols, \
                             results_shared_mem_names_q):
     #import os.path
     #import sys
@@ -1382,7 +1384,7 @@ def interpolate_subvol_init(volumes_data_shared_mem, \
     
     interpolate_subvol.interpolate_backend = interpolate_backend
     
-    interpolate_subvol.num_extra_subvols_included = num_extra_subvols_included
+    interpolate_subvol.num_extra_subvols = num_extra_subvols
     
     def calculate_default_epsilon_rbf_multiquadric_4D(x):
         
@@ -1507,7 +1509,7 @@ if __name__ == "__main__":
     # to utilize exactly all available cpu cores
     #num_workers = mp.cpu_count() - 1
     #num_workers = 10
-    num_workers = 3
+    num_workers = 1
     
     # Set the shape of each subvolume that is unterpolated over time
     # 20, 20, 20 was the maximum shape on a 32 GB RAM machine before memory error
@@ -1553,8 +1555,8 @@ if __name__ == "__main__":
     #subvols_mem_buffer_size = 10
     # Automatic modes: comment out subvols_mem_buffer_size below
     #subvols_mem_buffer_size = "AutoChunksize"
-    subvols_mem_buffer_size = "AutoChunksize2"
-    #subvols_mem_buffer_size = "AutoTotNum"
+    #subvols_mem_buffer_size = "AutoChunksize2"
+    subvols_mem_buffer_size = "AutoTotNum"
     
     # Should be large if you have a slow disk, but then you need a lot of RAM,
     # especially if you have many CPU cores and allow maximum CPU utilization;
@@ -1630,13 +1632,13 @@ if __name__ == "__main__":
     # May consume too much RAM when run with many --nifti input volumes
     if subvols_mem_buffer_size == "AutoChunksize":
         print("subvols_mem_buffer_size (chunksize) set to AutoChunksize")
-        subvols_mem_buffer_size, num_extra_subvols_included = calculate_chunksize(tot_num_subvols, num_workers, 4)
+        subvols_mem_buffer_size, num_extra_subvols = calculate_chunksize(tot_num_subvols, num_workers, 4)
     elif subvols_mem_buffer_size == "AutoChunksize2":
         print("subvols_mem_buffer_size (chunksize) set to AutoChunksize2")
-        subvols_mem_buffer_size, num_extra_subvols_included = calculate_chunksize(tot_num_subvols, num_workers, 4*4)
+        subvols_mem_buffer_size, num_extra_subvols = calculate_chunksize(tot_num_subvols, num_workers, 4*4)
     elif subvols_mem_buffer_size == "AutoTotNum":
         print("subvols_mem_buffer_size (chunksize) set to AutoTotNum")
-        subvols_mem_buffer_size, num_extra_subvols_included = calculate_chunksize(tot_num_subvols, num_workers, 1)
+        subvols_mem_buffer_size, num_extra_subvols = calculate_chunksize(tot_num_subvols, num_workers, 1)
     
     # Calculate chunksize using a default formula
     #chunksize = calculate_default_chunksize(len(interval_indexes_l), num_workers)
@@ -1648,10 +1650,13 @@ if __name__ == "__main__":
         print("shared_mem_obj_buffer_size set to Auto")
         #shared_mem_obj_buffer_size = 2+((tot_num_subvols//(num_workers))//subvols_mem_buffer_size)
         #if (tot_num_subvols/num_workers) % subvols_mem_buffer_size:
-        if num_extra_subvols_included:
+        #"""
+        if num_extra_subvols:
             shared_mem_obj_buffer_size = np.int32(1+((tot_num_subvols/num_workers)//subvols_mem_buffer_size))
         else:
             shared_mem_obj_buffer_size = np.int32((tot_num_subvols/num_workers)//subvols_mem_buffer_size)
+        #"""
+        #shared_mem_obj_buffer_size = np.int32((tot_num_subvols/num_workers)//subvols_mem_buffer_size)
     
     print("selected shared memory object buffer size: %i" % shared_mem_obj_buffer_size)
     #print("selected chunksize: %i" % chunksize)
@@ -1693,7 +1698,7 @@ if __name__ == "__main__":
                              tot_num_subvols, \
                              num_workers, \
                              interpolate_backend, \
-                             num_extra_subvols_included, \
+                             num_extra_subvols, \
                              results_shared_mem_names_q) \
                    ) # maxtasksperchild=1
     #"""

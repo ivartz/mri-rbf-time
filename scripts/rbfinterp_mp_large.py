@@ -14,6 +14,7 @@ import pathlib
 import sys
 import torch
 import gc
+import uuid
 
 # _t suffix in names means tuple
 # _l suffix in names means list
@@ -931,7 +932,7 @@ def merge_update_to_disk(save_dir, \
         #     (current_process_name, time_point+1, save_dir + "/" + "{0:03d}".format(time_point+1) + "_raw_voxels.npz"))
         
         # Load the existing voxel data for time_point
-        stitched_data_time_point = np.load(save_dir + "/raw/" + "{0:03d}".format(time_point+1) + "_raw_voxels.npz")["arr_0"]
+        stitched_data_time_point = np.load(save_dir + "/raw/" + "{0:03d}".format(time_point+1) + "_raw_voxels.npy")
         
         # Only look at the subvols from the current time point
         subvols_data_buffer_time_point = subvol_mem_data_buffer[:, time_point]
@@ -1001,7 +1002,7 @@ def merge_update_to_disk(save_dir, \
         #print("write %s: saving updated raw and NIFTI1 to disk" % current_process_name)
         #sys.stdout.flush()
         # Save raw voxel data (overwriting)
-        np.savez(save_dir + "/raw/" + "{0:03d}".format(time_point+1) + "_raw_voxels.npz", stitched_data_time_point)
+        np.save(save_dir + "/raw/" + "{0:03d}".format(time_point+1) + "_raw_voxels.npy", stitched_data_time_point)
         # Save NIFTI1 file of the current stitched data (overwriting)
         if using_mask and not mask_is_cube:
             # use the mask to not save excess sobvol voxels outside of mask
@@ -1026,14 +1027,14 @@ def stitch_subvols_from_shared_mem_and_save(results_shared_mem_names_q, \
     current_process_name = current_process.name
     
     # Create save directories if they don't exist
-    pathlib.Path(save_dir + "/raw").mkdir(parents=True, exist_ok=True)
+    pathlib.Path(save_dir + "/raw").mkdir(parents=False, exist_ok=True)
     pathlib.Path(save_dir + "/nii").mkdir(parents=False, exist_ok=True)
     
     # Create empty numpy array that is going to contain the stitched data
     stitched_data = np.empty(tot_vol_shape, dtype=np.float32)
     stitched_data.fill(np.nan)
     # Save the first version of the stitched data, individual files for each time point
-    [np.savez(save_dir + "/raw/" + "{0:03d}".format(time_point+1) + "_raw_voxels.npz", data) \
+    [np.save(save_dir + "/raw/" + "{0:03d}".format(time_point+1) + "_raw_voxels.npy", data) \
         for time_point, data in enumerate(stitched_data)]
     # Delete the data from memory
     del stitched_data
@@ -1113,10 +1114,10 @@ def stitch_subvols_from_shared_mem_and_save(results_shared_mem_names_q, \
                 # Close shared memory blocks, indicating that
                 # this process will not use this 
                 # shared memory instance any more
-                subvol_mem_index_shared_buffer.close()
-                subvol_mem_data_shared_buffer.close()
-                subvol_mem_index_shared_buffer.unlink()
-                subvol_mem_data_shared_buffer.unlink()
+                #subvol_mem_index_shared_buffer.close()
+                #subvol_mem_data_shared_buffer.close()
+                #subvol_mem_index_shared_buffer.unlink()
+                #subvol_mem_data_shared_buffer.unlink()
                 
                 # 
                 del subvol_mem_index_buffer_numpy
@@ -1124,6 +1125,98 @@ def stitch_subvols_from_shared_mem_and_save(results_shared_mem_names_q, \
                 
                 # Force free delete arrays
                 gc.collect()
+
+def stitch_subvols_from_tmpdir_and_save(subvol_shape, \
+                                       tot_vol_shape, \
+                                       tot_num_subvols, \
+                                       save_dir, \
+                                       nifti_header, \
+                                       nifti_affine, \
+                                       subvols_mem_buffer_size, \
+                                       using_mask, \
+                                       mask_is_cube, \
+                                       mask):
+    #
+    current_process = mp.current_process()
+    current_process_name = current_process.name
+    
+    # Create save directories if they don't exist
+    pathlib.Path(save_dir + "/raw").mkdir(parents=False, exist_ok=True)
+    pathlib.Path(save_dir + "/nii").mkdir(parents=False, exist_ok=True)
+    
+    # Create empty numpy array that is going to contain the stitched data
+    stitched_data = np.empty(tot_vol_shape, dtype=np.float32)
+    stitched_data.fill(np.nan)
+    # Save the first version of the stitched data, individual files for each time point
+    [np.save(save_dir + "/raw/" + "{0:03d}".format(time_point+1) + "_raw_voxels.npy", data) \
+        for time_point, data in enumerate(stitched_data)]
+    # Delete the data from memory
+    del stitched_data
+    
+    gc.collect()
+    
+    #
+    num_subvols_processed = 0
+    
+    (_, _, idxfiles) = next(os.walk(save_dir + "/idxtmp"))
+    (_, _, datafiles) = next(os.walk(save_dir + "/datatmp"))
+    
+    for idxfile, datafile in zip(idxfiles, datafiles):
+                
+        print("write %s: loading result data from disk" % current_process_name)
+        sys.stdout.flush()
+        # 
+        subvol_mem_index_buffer_numpy = \
+            np.load(save_dir + "/idxtmp/" + idxfile)
+        subvol_mem_data_buffer_numpy = \
+            np.load(save_dir + "/datatmp/" + datafile)
+        
+        # TODO: Slows down?
+        num_subvols_received = np.sum([1 for v in subvol_mem_data_buffer_numpy[:, 0] if not np.all(np.isnan(v))])
+        
+        #print("write %s: number of subvols in shared memory: %i" % (current_process_name, num_subvols_received))
+        
+        print("write %s: starting to write memory blocks to disk" % current_process_name)
+        sys.stdout.flush()
+        
+        # Merge buffered subvols with saved subvols from disk
+        # and save (overwrite) raw and NIFTI1 files to disk.
+        # This takes some time
+        merge_update_to_disk(save_dir, \
+                             subvol_mem_index_buffer_numpy, \
+                             subvol_mem_data_buffer_numpy, \
+                             nifti_affine, \
+                             nifti_header, \
+                             current_process, \
+                             current_process_name, \
+                             tot_vol_shape, \
+                             using_mask, \
+                             mask_is_cube, \
+                             mask)
+                             
+        num_subvols_processed += num_subvols_received
+        
+        print("write %s: total number of subvols processed: %i" % (current_process_name, num_subvols_processed))
+        
+        print("write %s: percent complete:" % current_process_name, end=" ")
+        print("{0:.2f}".format(100*(num_subvols_processed/tot_num_subvols)))
+        
+        sys.stdout.flush()
+        
+        # Close shared memory blocks, indicating that
+        # this process will not use this 
+        # shared memory instance any more
+        #subvol_mem_index_shared_buffer.close()
+        #subvol_mem_data_shared_buffer.close()
+        #subvol_mem_index_shared_buffer.unlink()
+        #subvol_mem_data_shared_buffer.unlink()
+        
+        # 
+        #del subvol_mem_index_buffer_numpy
+        #del subvol_mem_data_buffer_numpy
+        
+        # Force free delete arrays
+        #gc.collect()
 
 def interpolate_subvol(interval_index_t):
     
@@ -1213,113 +1306,142 @@ def interpolate_subvol(interval_index_t):
     
     # Save last interpolated volumes that do not 100 percent fill shared memory
     """
-    if (interpolate_subvol.num_shared_mem_obj_completed == (interpolate_subvol.tot_num_subvols//interpolate_subvol.subvols_mem_buffer_size)//(interpolate_subvol.num_workers) and \
+    if (interpolate_subvol.num_saved_mem_blocks == (interpolate_subvol.tot_num_subvols//interpolate_subvol.subvols_mem_buffer_size)//(interpolate_subvol.num_workers) and \
         interpolate_subvol.num_subvols_buffered == interpolate_subvol.tot_num_subvols % interpolate_subvol.subvols_mem_buffer_size) or \
-        (interpolate_subvol.num_shared_mem_obj_completed > (interpolate_subvol.tot_num_subvols//interpolate_subvol.subvols_mem_buffer_size)//(interpolate_subvol.num_workers)):
+        (interpolate_subvol.num_saved_mem_blocks > (interpolate_subvol.tot_num_subvols//interpolate_subvol.subvols_mem_buffer_size)//(interpolate_subvol.num_workers)):
         #print("BAM!")
     """
     #"""
     if interpolate_subvol.num_extra_subvols and \
-       ((interpolate_subvol.num_shared_mem_obj_completed + 1) // interpolate_subvol.shared_mem_obj_buffer_size) == interpolate_subvol.shared_mem_obj_buffer_size and \
+       ((interpolate_subvol.num_saved_mem_blocks + 1) // interpolate_subvol.mem_block_buffer_size) == interpolate_subvol.mem_block_buffer_size and \
        interpolate_subvol.num_subvols_buffered >= \
        (interpolate_subvol.num_extra_subvols - \
        interpolate_subvol.number_of_subvols_missing_before_no_remainder(interpolate_subvol.num_extra_subvols, interpolate_subvol.num_workers))\
        //interpolate_subvol.num_workers:
     #"""
         # 
-        print("interpolate %s: warning: incomplete last shared memory buffer encountered, signaling to write to disk" % current_process_name)
+        print("interpolate %s: warning: incomplete last memory block encountered, signaling to write to disk earlier" % current_process_name)
         sys.stdout.flush()
-        interpolate_subvol.last_shared_mem_obj_buffer_and_will_be_non_full = True
+        interpolate_subvol.last_mem_block_and_will_be_non_full = True
     
     # Only share result data as completely filled shared memory, except when the last potential incomplete
     # shared mempory results from last subvol interpolated and a special "finished" message is passed as argument
     if interpolate_subvol.num_subvols_buffered == interpolate_subvol.subvols_mem_buffer_size or \
-        interpolate_subvol.last_shared_mem_obj_buffer_and_will_be_non_full:
+        interpolate_subvol.last_mem_block_and_will_be_non_full:
         
-        print("interpolate %s: memory buffer full, time to copy into shared memory for stitching" % current_process_name)
+        print("interpolate %s: memory buffer full, time to save to disk for later stitching" % current_process_name)
         sys.stdout.flush()
-        
+        """
         # Reset buffer of shared objects if treshold exceeded
-        if interpolate_subvol.num_shared_mem_obj_buffered == interpolate_subvol.shared_mem_obj_buffer_size:
+        if interpolate_subvol.num_buffered_mem_blocks == interpolate_subvol.mem_block_buffer_size:
             # shared memory objects buffer exceeded, will overwrite old shared memory objects
             # hope that the computer managed to write the data to disk in time
             # Reset the shared memory objects buffer counter
-            print("interpolate %s: warning: shared memory object buffer full. Assuming data was written to disk in time, resetting buffer counter" % current_process_name)
+            print("interpolate %s: warning: shared memory object buffer full, resetting buffer counter" % current_process_name)
             sys.stdout.flush()
-            interpolate_subvol.num_shared_mem_obj_buffered = 0
-            
+            interpolate_subvol.num_buffered_mem_blocks = 0
+        """
+        """
         # Close and unlink old shared objects at object buffer location if available
-        if interpolate_subvol.shared_mem_obj_buffer[interpolate_subvol.num_shared_mem_obj_buffered] != None:
+        if interpolate_subvol.shared_mem_obj_buffer[interpolate_subvol.num_buffered_mem_blocks] != None:
             # Assuming the data in the shared memory had enought time to be written to disk
             # Close access to the shared memory from this process
             # Also, unlink the shared objects, and thus freeing up memory
             print("interpolate %s: closing access to shared memory" % current_process_name)
             sys.stdout.flush()
-            interpolate_subvol.shared_mem_obj_buffer[interpolate_subvol.num_shared_mem_obj_buffered][0].close()
-            interpolate_subvol.shared_mem_obj_buffer[interpolate_subvol.num_shared_mem_obj_buffered][1].close()
-            #interpolate_subvol.shared_mem_obj_buffer[interpolate_subvol.num_shared_mem_obj_buffered][0].unlink()
-            #interpolate_subvol.shared_mem_obj_buffer[interpolate_subvol.num_shared_mem_obj_buffered][1].unlink()
-        
+            interpolate_subvol.shared_mem_obj_buffer[interpolate_subvol.num_buffered_mem_blocks][0].close()
+            interpolate_subvol.shared_mem_obj_buffer[interpolate_subvol.num_buffered_mem_blocks][1].close()
+            #interpolate_subvol.shared_mem_obj_buffer[interpolate_subvol.num_buffered_mem_blocks][0].unlink()
+            #interpolate_subvol.shared_mem_obj_buffer[interpolate_subvol.num_buffered_mem_blocks][1].unlink()
+        """
         # Prepare shared memory objects for sharing result data with the image stitching process
         # https://docs.python.org/3.8/library/multiprocessing.shared_memory.html#multiprocessing.shared_memory.SharedMemory
-        
+        """
+        print("1")
+        sys.stdout.flush()
         subvol_mem_index_shared_buffer = \
             shared_memory.SharedMemory(create=True, \
             size=interpolate_subvol.subvol_mem_index_buffer.nbytes)
-        
+        print("2")
+        sys.stdout.flush()
         subvol_mem_data_shared_buffer = \
             shared_memory.SharedMemory(create=True, \
             size=interpolate_subvol.subvol_mem_data_buffer.nbytes)    
+        print("3")
+        sys.stdout.flush()
         
         # Add the shared memory objects to a buffer
-        interpolate_subvol.shared_mem_obj_buffer[interpolate_subvol.num_shared_mem_obj_buffered] = \
+        interpolate_subvol.shared_mem_obj_buffer[interpolate_subvol.num_buffered_mem_blocks] = \
         (subvol_mem_index_shared_buffer, subvol_mem_data_shared_buffer)
         
+        print("4")
+        sys.stdout.flush()
         # View the shared memory data as numpy arrays for inserting data
         subvol_mem_index_shared_buffer_numpy = \
         np.ndarray(interpolate_subvol.subvol_mem_index_buffer.shape, \
             dtype=interpolate_subvol.subvol_mem_index_buffer.dtype, \
-            buffer=interpolate_subvol.shared_mem_obj_buffer[interpolate_subvol.num_shared_mem_obj_buffered][0].buf)
-
+            buffer=interpolate_subvol.shared_mem_obj_buffer[interpolate_subvol.num_buffered_mem_blocks][0].buf)
+        print("5")
+        sys.stdout.flush()
         subvol_mem_data_shared_buffer_numpy = \
         np.ndarray(interpolate_subvol.subvol_mem_data_buffer.shape, \
             dtype=interpolate_subvol.subvol_mem_data_buffer.dtype, \
-            buffer=interpolate_subvol.shared_mem_obj_buffer[interpolate_subvol.num_shared_mem_obj_buffered][1].buf)
-        
+            buffer=interpolate_subvol.shared_mem_obj_buffer[interpolate_subvol.num_buffered_mem_blocks][1].buf)
+        print("6")
+        sys.stdout.flush()
+        """
         # Edge case: all subvols have been processed and we need to fill an incomplete shared memory.
         # The incomplete / old parts of the shared memory data is set to np.nan for being discarded 
         # from inclusion in the stitching process
-        if interpolate_subvol.last_shared_mem_obj_buffer_and_will_be_non_full:
+        if interpolate_subvol.last_mem_block_and_will_be_non_full:
             #print("interpolate %s: warning: non-full new shared memory, setting shared old data to np.nan to avoid being saved (again)\nIf RAM allows it, set subvols_mem_buffer_size to 'Auto' for optimal performance\nOtherwise, lower subvols_mem_buffer_size for lower RAM usage\n(slower, but better than receiving a lot of\nthis message when using a large subvols_mem_buffer_size)" % current_process_name)
-            print("interpolate %s: warning: non-full new shared memory, setting shared old data to np.nan to avoid being saved (again)" % current_process_name)
+            print("interpolate %s: warning: non-full new memory block containing old data, setting old data to np.nan to avoid being stitched (again)" % current_process_name)
             sys.stdout.flush()
             interpolate_subvol.subvol_mem_data_buffer[interpolate_subvol.num_subvols_buffered:] = np.nan
-        
+        """
+        print("7")
+        sys.stdout.flush()
         # Copy the the result data into shared memory
         #print("interpolate %s: copying interpolated data buffer into shared memory" % current_process_name)
         subvol_mem_index_shared_buffer_numpy[:] = \
             interpolate_subvol.subvol_mem_index_buffer[:]
         subvol_mem_data_shared_buffer_numpy[:] = \
             interpolate_subvol.subvol_mem_data_buffer[:]
-        
+        print("8")
+        sys.stdout.flush()
         # Put the names of the shared memory to the queue for letting the image stitching process
         # access the shared memory by the using these names
         print("interpolate %s: putting shared memory names of interpolated data into queue" % current_process_name)
         sys.stdout.flush()
-        interpolate_subvol.results_shared_mem_names_q.put_nowait((interpolate_subvol.shared_mem_obj_buffer[interpolate_subvol.num_shared_mem_obj_buffered][0].name, \
-                                                                  interpolate_subvol.shared_mem_obj_buffer[interpolate_subvol.num_shared_mem_obj_buffered][1].name))
+        interpolate_subvol.results_shared_mem_names_q.put_nowait((interpolate_subvol.shared_mem_obj_buffer[interpolate_subvol.num_buffered_mem_blocks][0].name, \
+                                                                  interpolate_subvol.shared_mem_obj_buffer[interpolate_subvol.num_buffered_mem_blocks][1].name))
+        print("9")
+        sys.stdout.flush()
+        """
+        
+        # Save to DISK
+        print("interpolate %s: saving interpolated data to temporalily to disk" % current_process_name)
+        
+        tempname=str(uuid.uuid4())
+        np.save(interpolate_subvol.save_dir + "/idxtmp/" + tempname, interpolate_subvol.subvol_mem_index_buffer)
+        np.save(interpolate_subvol.save_dir + "/datatmp/" + tempname, interpolate_subvol.subvol_mem_data_buffer)
         
         # Increment the shared memory objects buffer counters
-        interpolate_subvol.num_shared_mem_obj_buffered += 1
-        
-        interpolate_subvol.num_shared_mem_obj_completed += 1
-        
+        #interpolate_subvol.num_buffered_mem_blocks += 1
+        #print("10")
+        #sys.stdout.flush()
+        interpolate_subvol.num_saved_mem_blocks += 1
+        #print("11")
+        #sys.stdout.flush()
         # Reset the subvol buffer counter
         interpolate_subvol.num_subvols_buffered = 0
-
-        if interpolate_subvol.last_shared_mem_obj_buffer_and_will_be_non_full:
+        #print("12")
+        #sys.stdout.flush()
+        if interpolate_subvol.last_mem_block_and_will_be_non_full:
             # Resetting the incomplete buffer flag
-            interpolate_subvol.last_shared_mem_obj_buffer_and_will_be_non_full = False
+            interpolate_subvol.last_mem_block_and_will_be_non_full = False
+        #print("13")
+        #sys.stdout.flush()
 
 def interpolate_subvol_init(volumes_data_shared_mem, \
                             volumes_shape, \
@@ -1327,12 +1449,12 @@ def interpolate_subvol_init(volumes_data_shared_mem, \
                             subvol_shape, \
                             tot_vol_shape, \
                             subvols_mem_buffer_size, \
-                            shared_mem_obj_buffer_size, \
+                            mem_block_buffer_size, \
                             tot_num_subvols, \
                             num_workers, \
                             interpolate_backend, \
                             num_extra_subvols, \
-                            results_shared_mem_names_q):
+                            save_dir):
     #import os.path
     #import sys
     #sys.path.append('/home/ivar/Downloads/keops') # For enabling import of pykeops
@@ -1342,7 +1464,8 @@ def interpolate_subvol_init(volumes_data_shared_mem, \
     
     # The queue containing names of the shared memory 
     # containing the results: indices and interpolated data
-    interpolate_subvol.results_shared_mem_names_q = results_shared_mem_names_q
+    #interpolate_subvol.results_shared_mem_names_q = results_shared_mem_names_q
+    interpolate_subvol.save_dir = save_dir
     
     # Store the name of shared memory block containing all original volumes
     # non-interpolated volumes
@@ -1368,15 +1491,15 @@ def interpolate_subvol_init(volumes_data_shared_mem, \
         np.empty((subvols_mem_buffer_size, tot_vol_shape[0])+subvol_shape, dtype=np.float32)
         
     # Buffer for storing shared memory objects so that it can be accessed later
-    interpolate_subvol.shared_mem_obj_buffer_size = shared_mem_obj_buffer_size
+    interpolate_subvol.mem_block_buffer_size = mem_block_buffer_size
     
-    interpolate_subvol.shared_mem_obj_buffer = np.array([None]*shared_mem_obj_buffer_size)
+    #interpolate_subvol.shared_mem_obj_buffer = np.array([None]*mem_block_buffer_size)
     
-    interpolate_subvol.num_shared_mem_obj_buffered = 0
+    #interpolate_subvol.num_buffered_mem_blocks = 0
         
-    interpolate_subvol.num_shared_mem_obj_completed = 0
+    interpolate_subvol.num_saved_mem_blocks = 0
     
-    interpolate_subvol.last_shared_mem_obj_buffer_and_will_be_non_full = False
+    interpolate_subvol.last_mem_block_and_will_be_non_full = False
     
     interpolate_subvol.tot_num_subvols = tot_num_subvols
     
@@ -1509,7 +1632,7 @@ if __name__ == "__main__":
     # to utilize exactly all available cpu cores
     #num_workers = mp.cpu_count() - 1
     #num_workers = 10
-    num_workers = 1
+    num_workers = 3
     
     # Set the shape of each subvolume that is unterpolated over time
     # 20, 20, 20 was the maximum shape on a 32 GB RAM machine before memory error
@@ -1554,9 +1677,9 @@ if __name__ == "__main__":
     #subvols_mem_buffer_size = 400
     #subvols_mem_buffer_size = 10
     # Automatic modes: comment out subvols_mem_buffer_size below
-    #subvols_mem_buffer_size = "AutoChunksize"
+    subvols_mem_buffer_size = "AutoChunksize"
     #subvols_mem_buffer_size = "AutoChunksize2"
-    subvols_mem_buffer_size = "AutoTotNum"
+    #subvols_mem_buffer_size = "AutoTotNum"
     
     # Should be large if you have a slow disk, but then you need a lot of RAM,
     # especially if you have many CPU cores and allow maximum CPU utilization;
@@ -1575,7 +1698,7 @@ if __name__ == "__main__":
     # For roi volumes
     #shared_mem_buffer_size = 200
     #shared_mem_buffer_size = 2
-    shared_mem_obj_buffer_size = "Auto"
+    mem_block_buffer_size = "Auto"
     
     print("----------------------------------------------------------------")
     print("Welcome to the Radial Basis Function time interpolation routine!")
@@ -1635,7 +1758,7 @@ if __name__ == "__main__":
         subvols_mem_buffer_size, num_extra_subvols = calculate_chunksize(tot_num_subvols, num_workers, 4)
     elif subvols_mem_buffer_size == "AutoChunksize2":
         print("subvols_mem_buffer_size (chunksize) set to AutoChunksize2")
-        subvols_mem_buffer_size, num_extra_subvols = calculate_chunksize(tot_num_subvols, num_workers, 4*4)
+        subvols_mem_buffer_size, num_extra_subvols = calculate_chunksize(tot_num_subvols, num_workers, 4*70)
     elif subvols_mem_buffer_size == "AutoTotNum":
         print("subvols_mem_buffer_size (chunksize) set to AutoTotNum")
         subvols_mem_buffer_size, num_extra_subvols = calculate_chunksize(tot_num_subvols, num_workers, 1)
@@ -1646,19 +1769,19 @@ if __name__ == "__main__":
     print("number of subvols to process: %i" % tot_num_subvols)
     print("selected subvol memory buffer size (chunksize): %i" % subvols_mem_buffer_size)
     
-    if shared_mem_obj_buffer_size == "Auto":
-        print("shared_mem_obj_buffer_size set to Auto")
-        #shared_mem_obj_buffer_size = 2+((tot_num_subvols//(num_workers))//subvols_mem_buffer_size)
+    if mem_block_buffer_size == "Auto":
+        print("mem_block_buffer_size set to Auto")
+        #mem_block_buffer_size = 2+((tot_num_subvols//(num_workers))//subvols_mem_buffer_size)
         #if (tot_num_subvols/num_workers) % subvols_mem_buffer_size:
         #"""
         if num_extra_subvols:
-            shared_mem_obj_buffer_size = np.int32(1+((tot_num_subvols/num_workers)//subvols_mem_buffer_size))
+            mem_block_buffer_size = np.int32(1+((tot_num_subvols/num_workers)//subvols_mem_buffer_size))
         else:
-            shared_mem_obj_buffer_size = np.int32((tot_num_subvols/num_workers)//subvols_mem_buffer_size)
+            mem_block_buffer_size = np.int32((tot_num_subvols/num_workers)//subvols_mem_buffer_size)
         #"""
-        #shared_mem_obj_buffer_size = np.int32((tot_num_subvols/num_workers)//subvols_mem_buffer_size)
+        #mem_block_buffer_size = np.int32((tot_num_subvols/num_workers)//subvols_mem_buffer_size)
     
-    print("selected shared memory object buffer size: %i" % shared_mem_obj_buffer_size)
+    print("selected shared memory object buffer size: %i" % mem_block_buffer_size)
     #print("selected chunksize: %i" % chunksize)
     #"""
     
@@ -1680,7 +1803,7 @@ if __name__ == "__main__":
     manager = mp.Manager()
         
     # Queue with tuples each containing two strings; (subvols_ind_shared_mem_name, subvols_data_shared_mem_name)
-    results_shared_mem_names_q = manager.Queue()
+    #results_shared_mem_names_q = manager.Queue()
     
     # The final shape of the total volumes interpolated over time (number of time units)
     tot_vol_shape = (np.sum(intervals_between_volumes_t),) + vol_shape
@@ -1694,14 +1817,20 @@ if __name__ == "__main__":
                              subvol_shape, \
                              tot_vol_shape, \
                              subvols_mem_buffer_size, \
-                             shared_mem_obj_buffer_size, \
+                             mem_block_buffer_size, \
                              tot_num_subvols, \
                              num_workers, \
                              interpolate_backend, \
                              num_extra_subvols, \
-                             results_shared_mem_names_q) \
+                             args.savedir) \
                    ) # maxtasksperchild=1
     #"""
+    
+    #
+    pathlib.Path(args.savedir + "/idxtmp").mkdir(parents=True, exist_ok=True)
+    pathlib.Path(args.savedir + "/datatmp").mkdir(parents=False, exist_ok=True)
+    
+    """
     # Start process that listens for names of shared memory 
     # on results_shared_mem_names_qand that can be used to 
     # access result data from interpolation processes.
@@ -1721,7 +1850,7 @@ if __name__ == "__main__":
                                                                
     sp.daemon = True
     sp.start()
-    
+    """
     # Interpolate subvols in paralell
     #mp_p.starmap(interpolate_subvol, interval_indexes_l, chunksize=subvols_mem_buffer_size)
     
@@ -1729,13 +1858,24 @@ if __name__ == "__main__":
     
     # Interpolation processes is finished, so put a finish messages to results_shared_mem_names_q in order to end
     # the writing process
-    results_shared_mem_names_q.put_nowait(("finished", "finished"))
+    #results_shared_mem_names_q.put_nowait(("finished", "finished"))
     
     # Close the multiprocessing pool, joun for waiting for it to terminate
-    sp.join()
+    #sp.join()
     
     mp_p.close()
     mp_p.join()
+    
+    stitch_subvols_from_tmpdir_and_save(subvol_shape, \
+                                        tot_vol_shape, \
+                                        tot_num_subvols, \
+                                        args.savedir, \
+                                        volumes_niilike_t[0].header, \
+                                        volumes_niilike_t[0].affine, \
+                                        subvols_mem_buffer_size, \
+                                        using_mask, \
+                                        mask_is_cube, \
+                                        mask_data_arr)
     
     if interpolate_backend == "scipy_cpu":
         volumes_data_shared_mem_obj.close()

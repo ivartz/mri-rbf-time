@@ -1,5 +1,3 @@
-# longitudinal-study
- 
 # Radial Basis Function Interpolation on the time axis
 
 Assumes all volumes are co-rigestered to the first (baseline) volume.
